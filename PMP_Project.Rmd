@@ -1,0 +1,156 @@
+Practical Machine Learning course: project
+==========================================
+
+In this project, we will work on data collected by a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
+
+Our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were performing barbell lifts correctly and incorrectly in 5 different ways. For more information about the data you can visit the website: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+The data used in the project is subdivised into two parts, training data and test data.
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+1- Reading of data
+------------------
+We will read the data by using the `read.csv` function.
+
+Reading of the training dataset
+
+```{r echo=TRUE}
+setwd("D:/Coursera/Data Science Track/8_PracticalMachineLearning/project")
+
+trainRawData <- read.csv("pml-training.csv", stringsAsFactors=FALSE, na.strings = c("", "NA"))
+names(trainRawData)
+dim(trainRawData)
+```
+
+Read of the testing dadaset:
+
+```{r echo=TRUE}
+testRawData <- read.csv("pml-testing.csv",  stringsAsFactors=FALSE, na.strings = c("", "NA"))
+dim(testRawData)
+
+```
+
+
+2- Build the prediction model based on the Random Forest 
+-------------------------------
+
+2.1- cleaning the data
+
+A- Missing values (lots of NA values):
+
+After scanning the data I found lots of missing values for specific properties (columns), so I decided to discard such properties
+
+
+``` {r}
+# Computes number of NAs values by properties (columns)
+sumNAs <- sapply(trainRawData, function(x) {sum(is.na(x))}) 
+
+validIndex = which(sumNAs == 0)
+validTrainData <- trainRawData[, validIndex]
+validTestData  <- testRawData[, validIndex]
+
+# library(caret)
+# # partition valid training data into training set 75% and testing set 25%
+# trainIndex <- createDataPartition(y = validTrainData$classe, p=0.25,list=FALSE)
+# trainData <- validTrainData[trainIndex,]
+# testData <- validTrainData[-trainIndex,]
+
+```
+
+B- Irrelevant properties:
+There are some irrelvant properties like X, names and dates. So we will discard them also.
+
+
+```{r}
+
+# discards more irrelevant predictors
+discardIndex <- grep("timestamp|X|user_name|new_window",names(validTrainData))
+validTrainData <- validTrainData[,-discardIndex]
+validTestData <- validTestData[,-discardIndex]
+
+validTrainData$classe <- as.factor(validTrainData$classe)
+
+```
+
+C- Partition of valid training data into training set 75% and testing set 25%
+```{r}
+library(caret)
+# partition 
+trainIndex <- createDataPartition(y = validTrainData$classe, p=0.25,list=FALSE)
+trainVTData <- validTrainData[trainIndex,]
+testVTData <- validTrainData[-trainIndex,]
+
+```
+
+
+3- Training and testing
+-------------------------------
+
+3.1- model 1: I tried the rPart model but it takes long time to train the data and the accuracy is not quit good. 
+
+```{r CACHE=TRUE}
+# making the model
+tc <-  trainControl(method = "cv", number = 4)
+rPartModel <- train(trainVTData$classe ~ ., data = trainVTData, method="rpart", trControl = tc)
+rPartModel 
+```
+
+
+3.2- model 2: Finaly I decided to use the Random Forest Model for prediction.
+The result with the second model is much better in time and accuracy.
+
+```{r CACHE=TRUE}
+## train the selected data with the random forest model 
+tc <- trainControl(method = "repeatedcv", number = 3, repeats = 3, verboseIter=T, returnResamp='all')
+
+RFModelRepCV <- train(trainVTData$classe ~ ., data = trainVTData, method="rf", trControl = tc, prox=TRUE)
+RFModelRepCV
+```
+
+
+3.3- Predict with the test part of training data set
+The prediction accuracy result depends on the used model and the used predictors. 
+The running time of the model is very important also that is why I tried to minimize it by using suitable train contorl settings.
+I expect to get around 90 % exact predictions
+,
+
+Model 1:
+```{r CACHE=TRUE}
+pred <- predict(rPartModel, testVTData)
+table(pred, testVTData$classe )
+confusionMatrix(testVTData$classe, predict(rPartModel, testVTData))
+
+```
+
+
+Model 2:
+```{r CACHE=TRUE}
+# validTestData <- testRawData[, validIndex]
+# testData <- validTestData[,-discardIndex]
+# testData$classe <- as.factor(testData$classe) 
+
+pred <- predict(RFModelRepCV, testVTData)
+table(pred,testVTData$classe )
+confusionMatrix(testVTData$classe, predict(RFModelRepCV, testVTData))
+
+```
+
+The results show a much better prediction with the Random forest Model which we adopt for in this case.
+
+4- Predicting with provided testing set
+-------------------------
+I will apply the random forest model to predict the provided testing set.
+```{r}
+predResult <- data.frame(validTestData$problem_id, predict(RFModelRepCV, validTestData))
+names(predResult) <- c("Problem_id", "predicted_classes")
+predResult
+
+```
